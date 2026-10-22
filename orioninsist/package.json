@@ -1,0 +1,11 @@
+{
+  "name": "orioninsist-slidev-runner",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@slidev/cli": "53.0.0",
+    "@slidev/theme-default": "^0.25.0",
+    "@slidev/theme-seriph": "^0.25.0",
+    "playwright-chromium": "^1.56.0"
+  }
+}

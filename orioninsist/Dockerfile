@@ -1,0 +1,12 @@
+FROM node:22-bookworm-slim
+
+WORKDIR /app
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates fonts-dejavu-core fonts-liberation fonts-noto-color-emoji \
+    && rm -rf /var/lib/apt/lists/*
+COPY orioninsist/package.json /app/package.json
+RUN npm install --no-audit --no-fund \
+    && npx playwright install --with-deps chromium
+COPY orioninsist/runner.mjs /app/runner.mjs
+ENTRYPOINT ["node", "/app/runner.mjs"]
