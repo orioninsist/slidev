@@ -51,7 +51,7 @@ async function main() {
     throw new Error('Desteklenmeyen tema: ' + template.theme)
   if (!allowedFormats.has(format)) throw new Error('Desteklenmeyen format')
   const body = readFileSync(join(contentDir, source), 'utf8')
-  const stripped = body.replace(/^\uFEFF?---\r?\n[\s\S]*?\r?\n---\r?\n/, '')
+  const stripped = body.replace(/^(?:\uFEFF)?---\r?\n[\s\S]*?\r?\n---\r?\n/, '')
   const yamlHeader = ['---', 'theme: ' + template.theme, 'title: ' + JSON.stringify(template.title || cleanName(source)), '---', ''].join('\n')
   const workFile = join(root, '.orioninsist-slides.md')
   writeFileSync(workFile, yamlHeader + stripped)
