@@ -1,11 +1,36 @@
 {
   "name": "orioninsist-slidev-runner",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
+  "scripts": {
+    "dev": "slidev",
+    "build": "slidev build",
+    "export": "slidev export",
+    "export:pdf": "slidev export --format pdf",
+    "export:pptx": "slidev export --format pptx",
+    "export:pptx-editable": "slidev export --format pptx-editable",
+    "export:png": "slidev export --format png",
+    "export:md": "slidev export --format md",
+    "render:video": "node render-video.js"
+  },
   "dependencies": {
-    "@slidev/cli": "53.0.0",
+    "@slidev/cli": "^53.0.0",
+    "@slidev/theme-apple-basic": "^0.25.0",
+    "@slidev/theme-bricks": "^0.25.0",
     "@slidev/theme-default": "^0.25.0",
     "@slidev/theme-seriph": "^0.25.0",
-    "playwright-chromium": "^1.56.0"
+    "@slidev/theme-shibainu": "^0.25.0",
+    "slidev-addon-fancy-arrow": "^0.1.0",
+    "slidev-addon-python-runner": "^0.1.0",
+    "slidev-addon-tldraw": "^0.1.0",
+    "slidev-theme-academic": "^0.1.0",
+    "slidev-theme-dracula": "^0.1.0",
+    "slidev-theme-geist": "^0.1.0",
+    "slidev-theme-nord": "^0.0.6"
+  },
+  "devDependencies": {
+    "playwright": "^1.50.0",
+    "playwright-chromium": "^1.50.0"
   }
 }
