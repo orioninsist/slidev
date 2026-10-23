@@ -31,3 +31,5 @@ slides-export.md
 *slides-export.pptx
 .agents
 .claude
+/orioninsist/output/
+/orioninsist/.orioninsist-slides.md
