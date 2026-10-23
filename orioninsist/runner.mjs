@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { basename, join, resolve } from 'node:path'
 import { createInterface } from 'node:readline/promises'
 import { stdin, stdout } from 'node:process'
@@ -16,6 +16,7 @@ const formats = [
   { label: 'PNG', value: 'png' },
   { label: 'MD', value: 'md' },
   { label: 'HTML/SPA', value: 'html' },
+  { label: 'MP4 (5 sn/slayt)', value: 'mp4' },
 ]
 const allowedFormats = new Set(formats.map(item => item.value))
 
@@ -83,6 +84,60 @@ async function main() {
   ].join('\n')
   const workFile = join(root, '.orioninsist-slides.md')
   writeFileSync(workFile, yamlHeader + stripped)
+  if (format === 'mp4') {
+    const destination = join(outputDir, outputName + '.mp4')
+    const tempDir = mkdtempSync(join(outputDir, '.mp4-'))
+    try {
+      const pngDir = join(tempDir, 'frames')
+      const exportResult = spawnSync(process.execPath, [
+        '/app/node_modules/@slidev/cli/bin/slidev.mjs',
+        'export', workFile,
+        '--format', 'png',
+        '--output', pngDir,
+      ], { cwd: root, stdio: 'inherit', env: process.env })
+
+      if (exportResult.error) throw exportResult.error
+      if (exportResult.status !== 0)
+        throw new Error('MP4 icin PNG export basarisiz.')
+
+      const frames = readdirSync(pngDir)
+        .filter(name => /^\d+\.png$/.test(name))
+        .sort((a, b) => Number(a.slice(0, -4)) - Number(b.slice(0, -4)))
+
+      if (!frames.length) throw new Error('PNG kareleri bulunamadi.')
+
+      const concatFile = join(tempDir, 'frames.txt')
+      const quote = path => "'" + path.replace(/'/g, "'\\''") + "'"
+      const lines = []
+      for (const frame of frames) {
+        lines.push('file ' + quote(join(pngDir, frame)))
+        lines.push('duration 5')
+      }
+      lines.push('file ' + quote(join(pngDir, frames.at(-1))))
+      writeFileSync(concatFile, lines.join('\n') + '\n')
+
+      const tempVideo = join(tempDir, 'video.mp4')
+      const ffmpegResult = spawnSync('ffmpeg', [
+        '-hide_banner', '-loglevel', 'error', '-y',
+        '-f', 'concat', '-safe', '0', '-i', concatFile,
+        '-vf', 'fps=30,scale=trunc(iw/2)*2:trunc(ih/2)*2,format=yuv420p',
+        '-c:v', 'libx264', '-preset', 'medium',
+        '-movflags', '+faststart', tempVideo,
+      ], { cwd: root, stdio: 'inherit' })
+
+      if (ffmpegResult.error) throw ffmpegResult.error
+      if (ffmpegResult.status !== 0 || !existsSync(tempVideo))
+        throw new Error('FFmpeg MP4 uretimi basarisiz.')
+
+      const { renameSync } = await import('node:fs')
+      renameSync(tempVideo, destination)
+      console.log('\\nHazir: ' + destination)
+      return
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true })
+    }
+  }
+
   const isSPA = format === 'html'
   const extension = format === 'pptx-editable' ? 'pptx' : format
   const destination = join(outputDir, outputName + (isSPA ? '' : '.' + extension))
