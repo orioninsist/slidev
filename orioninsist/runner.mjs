@@ -1,6 +1,7 @@
-import { spawnSync } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { basename, join, resolve } from 'node:path'
+import { join } from 'node:path'
+import { chromium } from 'playwright-chromium'
 import { createInterface } from 'node:readline/promises'
 import { stdin, stdout } from 'node:process'
 
@@ -87,53 +88,123 @@ async function main() {
   if (format === 'mp4') {
     const destination = join(outputDir, outputName + '.mp4')
     const tempDir = mkdtempSync(join(outputDir, '.mp4-'))
+    const port = 3030
+    const url = `http://localhost:${port}`
+    const cli = '/app/node_modules/@slidev/cli/bin/slidev.mjs'
+
+    let server
+    let browser
+
     try {
-      const pngDir = join(tempDir, 'frames')
-      const exportResult = spawnSync(process.execPath, [
-        '/app/node_modules/@slidev/cli/bin/slidev.mjs',
-        'export', workFile,
-        '--format', 'png',
-        '--output', pngDir,
-      ], { cwd: root, stdio: 'inherit', env: process.env })
+      server = spawn(process.execPath, [
+        cli, workFile,
+        '--port', String(port),
+        '--log', 'info',
+      ], {
+        cwd: root,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: process.env,
+      })
 
-      if (exportResult.error) throw exportResult.error
-      if (exportResult.status !== 0)
-        throw new Error('MP4 icin PNG export basarisiz.')
+      server.stdout.on('data', data => process.stdout.write(data))
+      server.stderr.on('data', data => process.stderr.write(data))
 
-      const frames = readdirSync(pngDir)
-        .filter(name => /^\d+\.png$/.test(name))
-        .sort((a, b) => Number(a.slice(0, -4)) - Number(b.slice(0, -4)))
+      browser = await chromium.launch({
+        headless: true,
+        args: ['--no-sandbox'],
+      })
 
-      if (!frames.length) throw new Error('PNG kareleri bulunamadi.')
+      const context = await browser.newContext({
+        viewport: { width: 1280, height: 720 },
+        recordVideo: {
+          dir: tempDir,
+          size: { width: 1280, height: 720 },
+        },
+      })
 
-      const concatFile = join(tempDir, 'frames.txt')
-      const quote = path => "'" + path.replace(/'/g, "'\\''") + "'"
-      const lines = []
-      for (const frame of frames) {
-        lines.push('file ' + quote(join(pngDir, frame)))
-        lines.push('duration 5')
+      const page = await context.newPage()
+      let connected = false
+
+      for (let attempt = 0; attempt < 60; attempt++) {
+        if (server.exitCode !== null)
+          throw new Error('Slidev sunucusu kapandi.')
+
+        try {
+          const response = await page.goto(`${url}/1`, {
+            timeout: 2000,
+            waitUntil: 'domcontentloaded',
+          })
+          if (response?.ok()) {
+            connected = true
+            break
+          }
+        } catch {}
+
+        await page.waitForTimeout(1000)
       }
-      lines.push('file ' + quote(join(pngDir, frames.at(-1))))
-      writeFileSync(concatFile, lines.join('\n') + '\n')
 
-      const tempVideo = join(tempDir, 'video.mp4')
-      const ffmpegResult = spawnSync('ffmpeg', [
+      if (!connected)
+        throw new Error('Slidev sunucusuna baglanilamadi.')
+
+      await page.locator('.slidev-page').first().waitFor({
+        state: 'visible',
+        timeout: 30000,
+      })
+
+      const slideCount = await page.evaluate(() => {
+        const numbers = [...document.querySelectorAll('[class*="slidev-page-"]')]
+          .flatMap(element =>
+            [...element.classList]
+              .map(name => /^slidev-page-(\d+)$/.exec(name))
+              .filter(Boolean)
+              .map(match => Number(match[1]))
+          )
+        return Math.max(0, ...numbers)
+      })
+
+      if (!slideCount)
+        throw new Error('Slayt sayisi belirlenemedi.')
+
+      console.log(`\nAnimasyonlu MP4: ${slideCount} slayt`)
+
+      for (let slide = 1; slide <= slideCount; slide++) {
+        console.log(`Kaydediliyor: ${slide}/${slideCount}`)
+        await page.waitForTimeout(5000)
+
+        if (slide < slideCount) {
+          await page.keyboard.press('ArrowRight')
+          await page.waitForTimeout(1000)
+        }
+      }
+
+      const video = page.video()
+      await context.close()
+
+      const webm = await video.path()
+      const tempMp4 = join(tempDir, 'video.mp4')
+
+      const result = spawnSync('ffmpeg', [
         '-hide_banner', '-loglevel', 'error', '-y',
-        '-f', 'concat', '-safe', '0', '-i', concatFile,
-        '-vf', 'fps=30,scale=trunc(iw/2)*2:trunc(ih/2)*2,format=yuv420p',
-        '-c:v', 'libx264', '-preset', 'medium',
-        '-movflags', '+faststart', tempVideo,
-      ], { cwd: root, stdio: 'inherit' })
+        '-i', webm,
+        '-vf', 'fps=30,format=yuv420p',
+        '-c:v', 'libx264',
+        '-preset', 'medium',
+        '-movflags', '+faststart',
+        tempMp4,
+      ], { stdio: 'inherit' })
 
-      if (ffmpegResult.error) throw ffmpegResult.error
-      if (ffmpegResult.status !== 0 || !existsSync(tempVideo))
-        throw new Error('FFmpeg MP4 uretimi basarisiz.')
+      if (result.error) throw result.error
+      if (result.status !== 0 || !existsSync(tempMp4))
+        throw new Error('MP4 donusumu basarisiz.')
 
       const { renameSync } = await import('node:fs')
-      renameSync(tempVideo, destination)
-      console.log('\\nHazir: ' + destination)
+      renameSync(tempMp4, destination)
+
+      console.log('\nHazir: ' + destination)
       return
     } finally {
+      if (browser) await browser.close()
+      if (server) server.kill('SIGTERM')
       rmSync(tempDir, { recursive: true, force: true })
     }
   }
