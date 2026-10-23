@@ -7,9 +7,7 @@ import { stdin, stdout } from 'node:process'
 
 const root = '/workspace'
 const contentDir = join(root, 'content')
-const templateDir = join(root, 'template')
 const outputDir = join(root, 'output')
-const allowedThemes = new Set(['default', 'seriph'])
 const formats = [
   { label: 'PDF', value: 'pdf' },
   { label: 'PPTX', value: 'pptx' },
@@ -40,51 +38,38 @@ function cleanName(filename) {
 }
 async function main() {
   mkdirSync(contentDir, { recursive: true })
-  mkdirSync(templateDir, { recursive: true })
   mkdirSync(outputDir, { recursive: true })
   const contents = filesIn(contentDir, '.md')
-  const templates = filesIn(templateDir, '.json')
   if (!contents.length) throw new Error('content/ icinde en az bir .md dosyasi olmali.')
-  if (!templates.length) throw new Error('template/ icinde en az bir .json dosyasi olmali.')
 
   const rl = createInterface({ input: stdin, output: stdout })
-  let source, templateName, format, outputName
+  let source, format, outputName
   try {
     source = process.env.SLIDEV_CONTENT ||
       await choice(rl, 'Markdown dosyasi:', contents)
-    templateName = process.env.SLIDEV_TEMPLATE ||
-      await choice(rl, 'Sablon:', templates)
+
     const selected = process.env.SLIDEV_FORMAT ||
       await choice(rl, 'Cikti formati:', formats.map(item => item.label))
-    format = formats.find(item => item.label === selected)?.value
-    if (!contents.includes(source) || !templates.includes(templateName) || !format)
-      throw new Error('Gecersiz icerik, sablon veya format')
+
+    format = formats.find(item =>
+      item.label === selected || item.value === selected
+    )?.value
+
+    if (!contents.includes(source) || !format)
+      throw new Error('Gecersiz Markdown veya format')
+
     outputName = cleanName(source)
+    await rl.question('Uretmek icin Enter: ')
   }
   finally { rl.close() }
 
-  const template = JSON.parse(readFileSync(join(templateDir, templateName), 'utf8'))
-  if (!allowedThemes.has(template.theme))
-    throw new Error('Desteklenmeyen tema: ' + template.theme)
-  if (!allowedFormats.has(format)) throw new Error('Desteklenmeyen format')
+  if (!allowedFormats.has(format))
+    throw new Error('Desteklenmeyen format')
+
   const body = readFileSync(join(contentDir, source), 'utf8')
-  const frontmatter = body.match(/^(?:\uFEFF)?---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/)
-  const stripped = frontmatter ? body.slice(frontmatter[0].length) : body
-  const originalHeader = frontmatter ? frontmatter[1] : ''
-  const preservedHeader = originalHeader
-    .split(/\r?\n/)
-    .filter(line => !/^(?:theme|title)\s*:/.test(line))
-    .join('\n')
-  const yamlHeader = [
-    '---',
-    preservedHeader,
-    'theme: ' + template.theme,
-    'title: ' + JSON.stringify(template.title || cleanName(source)),
-    '---',
-    '',
-  ].join('\n')
   const workFile = join(root, '.orioninsist-slides.md')
-  writeFileSync(workFile, yamlHeader + stripped)
+  writeFileSync(workFile, body)
+
   if (format === 'mp4') {
     const destination = join(outputDir, outputName + '.mp4')
     const tempDir = mkdtempSync(join(outputDir, '.mp4-'))
