@@ -44,7 +44,7 @@ SLIDEV_FORMAT="$(
     'PNG' \
     'MD' \
     'HTML/SPA' \
-    'MP4 (5 sn/slayt)' |
+    'MP4' |
     fzf --height=40% --reverse --border \
         --prompt='Format > ' --header='Ok tuslari ile sec, Enter ile onayla'
 )" || exit 0

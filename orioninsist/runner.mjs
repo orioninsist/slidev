@@ -15,7 +15,7 @@ const formats = [
   { label: 'PNG', value: 'png' },
   { label: 'MD', value: 'md' },
   { label: 'HTML/SPA', value: 'html' },
-  { label: 'MP4 (5 sn/slayt)', value: 'mp4' },
+  { label: 'MP4', value: 'mp4' },
 ]
 const allowedFormats = new Set(formats.map(item => item.value))
 
@@ -73,22 +73,75 @@ async function main() {
   if (format === 'mp4') {
     const destination = join(outputDir, outputName + '.mp4')
     const tempDir = mkdtempSync(join(outputDir, '.mp4-'))
-    const port = 3030
-    const url = `http://localhost:${port}`
+    const buildDir = join(tempDir, 'spa')
     const cli = '/app/node_modules/@slidev/cli/bin/slidev.mjs'
-
+    const port = 3030
+    const url = `http://127.0.0.1:${port}`
     let server
     let browser
 
     try {
-      server = spawn(process.execPath, [
-        cli, workFile,
-        '--port', String(port),
-        '--log', 'info',
+      console.log('\nSlidev HTML/SPA olusturuluyor...')
+
+      const build = spawnSync(process.execPath, [
+        cli, 'build', workFile,
+        '--out', buildDir,
       ], {
         cwd: root,
-        stdio: ['ignore', 'pipe', 'pipe'],
         env: process.env,
+        stdio: 'inherit',
+      })
+
+      if (build.error) throw build.error
+      if (build.status !== 0 || !existsSync(join(buildDir, 'index.html')))
+        throw new Error('HTML/SPA olusturulamadi.')
+
+      console.log('HTML/SPA hazir.')
+
+      const staticServer = `
+        const http = require('node:http')
+        const fs = require('node:fs')
+        const path = require('node:path')
+        const root = process.argv[1]
+        const port = Number(process.argv[2])
+        const types = {
+          '.html': 'text/html',
+          '.js': 'text/javascript',
+          '.css': 'text/css',
+          '.json': 'application/json',
+          '.svg': 'image/svg+xml',
+          '.png': 'image/png',
+          '.jpg': 'image/jpeg',
+          '.jpeg': 'image/jpeg',
+          '.webp': 'image/webp',
+          '.woff': 'font/woff',
+          '.woff2': 'font/woff2',
+          '.wasm': 'application/wasm',
+        }
+        http.createServer((req, res) => {
+          const pathname = decodeURIComponent(new URL(req.url, 'http://localhost').pathname)
+          const target = path.resolve(root, '.' + pathname)
+          if (target !== root && !target.startsWith(root + path.sep)) {
+            res.writeHead(403).end()
+            return
+          }
+          const file = fs.existsSync(target) && fs.statSync(target).isFile()
+            ? target
+            : path.join(root, 'index.html')
+          res.setHeader('Content-Type', types[path.extname(file)] || 'application/octet-stream')
+          fs.createReadStream(file).on('error', () => {
+            if (!res.headersSent) res.writeHead(404)
+            res.end()
+          }).pipe(res)
+        }).listen(port, '127.0.0.1')
+      `
+
+      server = spawn(process.execPath, [
+        '-e', staticServer, buildDir, String(port),
+      ], {
+        cwd: root,
+        env: process.env,
+        stdio: ['ignore', 'pipe', 'pipe'],
       })
 
       server.stdout.on('data', data => process.stdout.write(data))
@@ -99,6 +152,44 @@ async function main() {
         args: ['--no-sandbox'],
       })
 
+      const warmup = await browser.newContext({
+        viewport: { width: 1280, height: 720 },
+      })
+      const warmupPage = await warmup.newPage()
+
+      let ready = false
+      for (let attempt = 0; attempt < 60; attempt++) {
+        if (server.exitCode !== null)
+          throw new Error('Slidev sunucusu kapandi.')
+
+        try {
+          const response = await warmupPage.goto(`${url}/1`, {
+            waitUntil: 'networkidle',
+            timeout: 5000,
+          })
+          if (response?.ok()) {
+            await warmupPage.locator(
+              '.slidev-page[data-slidev-no="1"]:visible'
+            ).waitFor({ timeout: 5000 })
+            await warmupPage.evaluate(() => document.fonts.ready)
+            ready = true
+            break
+          }
+        } catch {}
+        await warmupPage.waitForTimeout(1000)
+      }
+
+      if (!ready)
+        throw new Error('Slidev sunumu hazir degil.')
+
+      const { parseSync } = await import('@slidev/parser')
+      const slideCount = parseSync(body).slides.length
+
+      if (!slideCount)
+        throw new Error('Slayt bulunamadi.')
+
+      console.log(`Sunum hazir: ${slideCount} slayt`)
+
       const context = await browser.newContext({
         viewport: { width: 1280, height: 720 },
         recordVideo: {
@@ -108,55 +199,41 @@ async function main() {
       })
 
       const page = await context.newPage()
-      let connected = false
-
-      for (let attempt = 0; attempt < 60; attempt++) {
-        if (server.exitCode !== null)
-          throw new Error('Slidev sunucusu kapandi.')
-
-        try {
-          const response = await page.goto(`${url}/1`, {
-            timeout: 2000,
-            waitUntil: 'domcontentloaded',
-          })
-          if (response?.ok()) {
-            connected = true
-            break
-          }
-        } catch {}
-
-        await page.waitForTimeout(1000)
-      }
-
-      if (!connected)
-        throw new Error('Slidev sunucusuna baglanilamadi.')
-
-      await page.locator('.slidev-page').first().waitFor({
-        state: 'visible',
+      await page.goto(`${url}/1`, {
+        waitUntil: 'networkidle',
         timeout: 30000,
       })
+      await page.locator(
+        '.slidev-page[data-slidev-no="1"]:visible'
+      ).waitFor({ timeout: 30000 })
+      await page.evaluate(() => document.fonts.ready)
 
-      const slideCount = await page.evaluate(() => {
-        const numbers = [...document.querySelectorAll('[class*="slidev-page-"]')]
-          .flatMap(element =>
-            [...element.classList]
-              .map(name => /^slidev-page-(\d+)$/.exec(name))
-              .filter(Boolean)
-              .map(match => Number(match[1]))
-          )
-        return Math.max(0, ...numbers)
-      })
-
-      if (!slideCount)
-        throw new Error('Slayt sayisi belirlenemedi.')
-
-      console.log(`\nAnimasyonlu MP4: ${slideCount} slayt`)
+      console.log('MP4 kaydi basladi.')
 
       for (let slide = 1; slide <= slideCount; slide++) {
         console.log(`Kaydediliyor: ${slide}/${slideCount}`)
-        await page.waitForTimeout(5000)
 
-        if (slide < slideCount) {
+        if (slide > 1) {
+          await page.keyboard.press('ArrowDown')
+          await page.waitForURL(
+            new RegExp(`/${slide}(?:\\?|$)`),
+            { timeout: 10000 },
+          )
+        }
+
+        await page.waitForTimeout(2000)
+
+        const clickSteps = await page.locator(
+          `.slidev-page[data-slidev-no="${slide}"] [data-slidev-clicks-start]`
+        ).evaluateAll(elements =>
+          Math.max(0, ...elements.map(element =>
+            Number(element.dataset.slidevClicksStart) || 0
+          ))
+        )
+
+        console.log(`Animasyon adimi: ${clickSteps}`)
+
+        for (let click = 0; click < clickSteps; click++) {
           await page.keyboard.press('ArrowRight')
           await page.waitForTimeout(1000)
         }
@@ -166,24 +243,24 @@ async function main() {
       await context.close()
 
       const webm = await video.path()
-      const tempMp4 = join(tempDir, 'video.mp4')
+      const mp4 = join(tempDir, 'video.mp4')
 
-      const result = spawnSync('ffmpeg', [
+      const conversion = spawnSync('ffmpeg', [
         '-hide_banner', '-loglevel', 'error', '-y',
         '-i', webm,
         '-vf', 'fps=30,format=yuv420p',
         '-c:v', 'libx264',
         '-preset', 'medium',
         '-movflags', '+faststart',
-        tempMp4,
+        mp4,
       ], { stdio: 'inherit' })
 
-      if (result.error) throw result.error
-      if (result.status !== 0 || !existsSync(tempMp4))
+      if (conversion.error) throw conversion.error
+      if (conversion.status !== 0 || !existsSync(mp4))
         throw new Error('MP4 donusumu basarisiz.')
 
       const { renameSync } = await import('node:fs')
-      renameSync(tempMp4, destination)
+      renameSync(mp4, destination)
 
       console.log('\nHazir: ' + destination)
       return
