@@ -8,4 +8,7 @@ if ! command -v docker >/dev/null 2>&1; then
 fi
 docker build -t orioninsist-slidev -f Dockerfile ..
 docker run --rm -it --user "$(id -u):$(id -g)" \
-  -e HOME=/tmp -v "$PWD:/workspace:Z" orioninsist-slidev
+  -e HOME=/tmp \
+  -e SLIDEV_CONTENT -e SLIDEV_TEMPLATE \
+  -e SLIDEV_FORMAT -e SLIDEV_OUTPUT \
+  -v "$PWD:/workspace:Z" orioninsist-slidev

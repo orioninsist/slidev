@@ -48,19 +48,16 @@ async function main() {
   const rl = createInterface({ input: stdin, output: stdout })
   let source, templateName, format, outputName
   try {
-    source = await choice(rl, 'Markdown dosyasi:', contents)
-    templateName = await choice(rl, 'Sablon:', templates)
-    const selected = await choice(
-      rl, 'Cikti formati:', formats.map(item => item.label)
-    )
-    format = formats.find(item => item.label === selected).value
-    const defaultName = cleanName(source) + '-' +
-      cleanName(templateName.replace(/\.json$/, '')) +
-      (format === 'pptx-editable' ? '-editable' : '')
-    const answer = (await rl.question(
-      'Cikti adi [' + defaultName + ']: '
-    )).trim()
-    outputName = answer ? cleanName(answer) : defaultName
+    source = process.env.SLIDEV_CONTENT ||
+      await choice(rl, 'Markdown dosyasi:', contents)
+    templateName = process.env.SLIDEV_TEMPLATE ||
+      await choice(rl, 'Sablon:', templates)
+    const selected = process.env.SLIDEV_FORMAT ||
+      await choice(rl, 'Cikti formati:', formats.map(item => item.label))
+    format = formats.find(item => item.label === selected)?.value
+    if (!contents.includes(source) || !templates.includes(templateName) || !format)
+      throw new Error('Gecersiz icerik, sablon veya format')
+    outputName = cleanName(source)
   }
   finally { rl.close() }
 
@@ -77,8 +74,10 @@ async function main() {
   const extension = format === 'pptx-editable' ? 'pptx' : format
   const destination = join(outputDir, outputName + (isSPA ? '' : '.' + extension))
 
-  if (existsSync(destination))
-    throw new Error('Cikti zaten mevcut: ' + destination)
+  if (existsSync(destination)) {
+    const { rmSync } = await import('node:fs')
+    rmSync(destination, { recursive: true, force: true })
+  }
 
   console.log('\\nOlusturuluyor: ' + destination)
 
