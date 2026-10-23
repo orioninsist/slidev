@@ -8,5 +8,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY orioninsist/package.json /app/package.json
 RUN npm install --no-audit --no-fund \
     && npx playwright install --with-deps chromium
+RUN mkdir -p /app/node_modules/@slidev/cli/node_modules/.vite \
+    && chmod -R a+rwX /app/node_modules/@slidev/cli/node_modules/.vite
 COPY orioninsist/runner.mjs /app/runner.mjs
 ENTRYPOINT ["node", "/app/runner.mjs"]
