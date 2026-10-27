@@ -17,6 +17,9 @@ COPY slidev-docker.package.json /app/package.json
 RUN npm install --no-audit --no-fund \
     && npx playwright install --with-deps chromium
 
+RUN mkdir -p /app/node_modules/@slidev/cli/node_modules \
+    && ln -s /app/node_modules/katex /app/node_modules/@slidev/cli/node_modules/katex
+
 RUN mkdir -p /app/node_modules/@slidev/cli/node_modules/.vite \
     && chmod -R a+rwX /app/node_modules/@slidev/cli/node_modules/.vite
 
