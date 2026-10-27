@@ -66,9 +66,45 @@ async function main() {
   if (!allowedFormats.has(format))
     throw new Error('Desteklenmeyen format')
 
-  const body = readFileSync(join(contentDir, source), 'utf8')
+  const original = readFileSync(join(contentDir, source), 'utf8')
     .replace(/^\uFEFF/, '')
     .replace(/^(?:[ \t]*\r?\n)+/, '')
+
+  const themes = new Set([
+    'default', 'seriph', 'apple-basic', 'bricks', 'shibainu',
+    'academic', 'dracula', 'geist', 'nord',
+  ])
+  const transitions = new Set(['fade', 'slide-left', 'slide-right'])
+
+  const theme = process.env.SLIDEV_THEME
+  const transition = process.env.SLIDEV_TRANSITION
+
+  if (theme && !themes.has(theme))
+    throw new Error('Gecersiz Slidev temasi: ' + theme)
+  if (transition && !transitions.has(transition))
+    throw new Error('Gecersiz Slidev gecisi: ' + transition)
+
+  let body = original
+
+  if (theme || transition) {
+    const yaml = /^---\r?\n([\s\S]*?)\r?\n---(?=\r?\n|$)/
+    const match = body.match(yaml)
+    let head = match ? match[1] : ''
+
+    for (const [key, value] of [['theme', theme], ['transition', transition]]) {
+      if (!value) continue
+      const line = new RegExp('^' + key + ':[^\\r\\n]*$', 'm')
+      head = line.test(head)
+        ? head.replace(line, key + ': ' + value)
+        : head + (head ? '\n' : '') + key + ': ' + value
+    }
+
+    const prefix = '---\n' + head + '\n---'
+    body = match
+      ? prefix + body.slice(match[0].length)
+      : prefix + '\n\n' + body
+  }
+
   const workFile = join(root, '.orioninsist-slides.md')
   writeFileSync(workFile, body)
 

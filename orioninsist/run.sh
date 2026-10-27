@@ -34,6 +34,28 @@ SLIDEV_CONTENT="$(
 
 [ -n "$SLIDEV_CONTENT" ] || exit 0
 
+echo "=== Slidev Tema Secimi ==="
+
+SLIDEV_THEME="$(
+  printf '%s\n' \
+    default seriph apple-basic bricks shibainu \
+    academic dracula geist nord |
+    fzf --height=40% --reverse --border \
+        --prompt='Tema > ' --header='Slidev temasini sec'
+)" || exit 0
+
+[ -n "$SLIDEV_THEME" ] || exit 0
+
+echo "=== Slayt Gecisi ==="
+
+SLIDEV_TRANSITION="$(
+  printf '%s\n' fade slide-left slide-right |
+    fzf --height=40% --reverse --border \
+        --prompt='Gecis > ' --header='Slidev gecisini sec'
+)" || exit 0
+
+[ -n "$SLIDEV_TRANSITION" ] || exit 0
+
 echo "=== Format Secimi ==="
 
 SLIDEV_FORMAT="$(
@@ -53,17 +75,17 @@ SLIDEV_FORMAT="$(
 
 echo
 echo "Markdown: $SLIDEV_CONTENT"
-echo "Format:   $SLIDEV_FORMAT"
+echo "Format:   $SLIDEV_FORMAT"\necho "Tema:     $SLIDEV_THEME"\necho "Gecis:    $SLIDEV_TRANSITION"
 echo
 
 docker build -t orioninsist-slidev -f Dockerfile ..
 
-export SLIDEV_CONTENT SLIDEV_FORMAT
+export SLIDEV_CONTENT SLIDEV_FORMAT SLIDEV_THEME SLIDEV_TRANSITION
 
 docker run --rm -it \
   --user "$(id -u):$(id -g)" \
   -e HOME=/tmp \
   -e SLIDEV_CONTENT \
-  -e SLIDEV_FORMAT \
+  -e SLIDEV_FORMAT \\n  -e SLIDEV_THEME \\\n  -e SLIDEV_TRANSITION \\
   -v "$PWD:/workspace:Z" \
   orioninsist-slidev
