@@ -11,8 +11,7 @@
     "export:pptx": "slidev export --format pptx",
     "export:pptx-editable": "slidev export --format pptx-editable",
     "export:png": "slidev export --format png",
-    "export:md": "slidev export --format md",
-    "render:video": "node render-video.js"
+    "export:md": "slidev export --format md"
   },
   "dependencies": {
     "@slidev/cli": "^53.0.0",

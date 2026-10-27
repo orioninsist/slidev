@@ -7,5 +7,5 @@ slidev() {
     -v "$PWD:/work:Z" \
     -w /work \
     -p 3030:3030 \
-    slidev-native "$@"
+    orioninsist-slidev:latest "$@"
 }
