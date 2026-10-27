@@ -90,6 +90,12 @@ slidev() {
   local -a ports=()
   if [[ "$command_name" == "dev" ]]; then
     ports=(-p 3030:3030)
+    if [[ " ${args[*]} " != *" --remote "* ]]; then
+      args+=(--remote)
+    fi
+    if [[ " ${args[*]} " != *" --bind "* ]]; then
+      args+=(--bind 0.0.0.0)
+    fi
   fi
 
   docker run --rm -it \
