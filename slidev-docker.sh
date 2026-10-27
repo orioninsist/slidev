@@ -51,7 +51,11 @@ slidev() {
         _slidev_mount "$path" || return 1
 
         if [[ "$option" == "--out" || "$option" == "-o" ]]; then
-          args[i+1]="$path"
+          if [[ "$(dirname -- "$path")" == "$PWD" ]]; then
+            args[i+1]="/work/$(basename -- "$path")"
+          else
+            args[i+1]="$path"
+          fi
         fi
 
         ((i++))
@@ -83,11 +87,16 @@ slidev() {
 
   unset -f _slidev_mount
 
+  local -a ports=()
+  if [[ "$command_name" == "dev" ]]; then
+    ports=(-p 3030:3030)
+  fi
+
   docker run --rm -it \
     --user "$(id -u):$(id -g)" \
     -e HOME=/tmp \
     "${mounts[@]}" \
     -w /work \
-    -p 3030:3030 \
+    "${ports[@]}" \
     orioninsist-slidev:latest "${args[@]}"
 }
