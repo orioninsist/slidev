@@ -67,10 +67,33 @@ async function main() {
     throw new Error('Desteklenmeyen format')
 
   const body = readFileSync(join(contentDir, source), 'utf8')
+    .replace(/^\uFEFF/, '')
+    .replace(/^(?:[ \t]*\r?\n)+/, '')
   const workFile = join(root, '.orioninsist-slides.md')
   writeFileSync(workFile, body)
 
   if (format === 'mp4') {
+    const lines = body.replace(/^\uFEFF/, '').trimStart().split(/\r?\n/)
+    const yamlEnd = lines[0].trim() === '---'
+      ? lines.findIndex((line, index) => index > 0 && line.trim() === '---')
+      : -1
+    const ratioLine = yamlEnd > 0
+      ? lines.slice(1, yamlEnd).find(line => line.trim().startsWith('aspectRatio:'))
+      : undefined
+    const ratio = ratioLine
+      ? ratioLine.split(':').slice(1).join(':').trim().replaceAll('"', '').replaceAll("'", '')
+      : '16/9'
+    const match = ratio.match(/^(\d+)\s*\/\s*(\d+)$/)
+
+    if (!match || Number(match[2]) === 0)
+      throw new Error('Gecersiz aspectRatio: ' + ratio)
+
+    const aspect = Number(match[1]) / Number(match[2])
+    const videoSize = aspect < 1
+      ? { width: 1080, height: 1920 }
+      : { width: 1920, height: 1080 }
+
+    console.log(`MP4 boyutu: ${videoSize.width}x${videoSize.height}`)
     const destination = join(outputDir, outputName + '.mp4')
     const tempDir = mkdtempSync(join(outputDir, '.mp4-'))
     const buildDir = join(tempDir, 'spa')
@@ -153,7 +176,7 @@ async function main() {
       })
 
       const warmup = await browser.newContext({
-        viewport: { width: 1280, height: 720 },
+        viewport: videoSize,
       })
       const warmupPage = await warmup.newPage()
 
@@ -191,10 +214,10 @@ async function main() {
       console.log(`Sunum hazir: ${slideCount} slayt`)
 
       const context = await browser.newContext({
-        viewport: { width: 1280, height: 720 },
+        viewport: videoSize,
         recordVideo: {
           dir: tempDir,
-          size: { width: 1280, height: 720 },
+          size: videoSize,
         },
       })
 
