@@ -75,7 +75,9 @@ SLIDEV_FORMAT="$(
 
 echo
 echo "Markdown: $SLIDEV_CONTENT"
-echo "Format:   $SLIDEV_FORMAT"\necho "Tema:     $SLIDEV_THEME"\necho "Gecis:    $SLIDEV_TRANSITION"
+echo "Format:   $SLIDEV_FORMAT"
+echo "Tema:     $SLIDEV_THEME"
+echo "Gecis:    $SLIDEV_TRANSITION"
 echo
 
 docker build -t orioninsist-slidev -f Dockerfile ..
@@ -86,6 +88,8 @@ docker run --rm -it \
   --user "$(id -u):$(id -g)" \
   -e HOME=/tmp \
   -e SLIDEV_CONTENT \
-  -e SLIDEV_FORMAT \\n  -e SLIDEV_THEME \\\n  -e SLIDEV_TRANSITION \\
+ -e SLIDEV_FORMAT \
+ -e SLIDEV_THEME \
+ -e SLIDEV_TRANSITION \
   -v "$PWD:/workspace:Z" \
   orioninsist-slidev
